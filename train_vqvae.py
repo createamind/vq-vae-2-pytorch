@@ -57,7 +57,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
 
             sample = img[:sample_size]
             # img_, _ = loader_.next()
-            for i, (img_, label) in enumerate(loader_)
+            for i, (img_, label) in enumerate(loader_):
                 img_ = img_
                 break
             sample_ = img_[:sample_size]
@@ -66,13 +66,20 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 out_, _ = model(sample_)
 
             utils.save_image(
-                torch.cat([sample, out, sample_, out_], 0),
+                torch.cat([sample, out], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
                 range=(-1, 1),
             )
 
+            utils.save_image(
+                torch.cat([sample_, out_], 0),
+                f'sample2/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
+                nrow=sample_size,
+                normalize=True,
+                range=(-1, 1),
+            )
             model.train()
 
 
