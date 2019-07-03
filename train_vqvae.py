@@ -59,6 +59,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             # img_, _ = loader_.next()
             for i, (img_, label) in enumerate(loader_):
                 img_ = img_
+                img_ = img_.to(device)
                 break
             sample_ = img_[:sample_size]
             with torch.no_grad():
