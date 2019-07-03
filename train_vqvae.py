@@ -56,7 +56,10 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             model.eval()
 
             sample = img[:sample_size]
-            img_, _ = loader_.next()
+            # img_, _ = loader_.next()
+            for i, (img_, label) in enumerate(loader)
+                img_ = img_
+                break
             sample_ = img_[:sample_size]
             with torch.no_grad():
                 out, _ = model(sample)
