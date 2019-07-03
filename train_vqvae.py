@@ -57,7 +57,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
 
             sample = img[:sample_size]
             # img_, _ = loader_.next()
-            for i, (img_, label) in enumerate(loader)
+            for i, (img_, label) in enumerate(loader_)
                 img_ = img_
                 break
             sample_ = img_[:sample_size]
