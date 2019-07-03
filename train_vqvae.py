@@ -12,8 +12,9 @@ from vqvae import VQVAE
 from scheduler import CycleScheduler
 
 
-def train(epoch, loader, model, optimizer, scheduler, device):
+def train(epoch, loader, model, optimizer, scheduler, device, loader_):
     loader = tqdm(loader)
+    loader_ = tqdm(loader_)
 
     criterion = nn.MSELoss()
 
@@ -55,12 +56,14 @@ def train(epoch, loader, model, optimizer, scheduler, device):
             model.eval()
 
             sample = img[:sample_size]
-
+            img_, _ = loader_.next()
+            sample_ = img_[:sample_size]
             with torch.no_grad():
                 out, _ = model(sample)
+                out_, _ = model(sample_)
 
             utils.save_image(
-                torch.cat([sample, out], 0),
+                torch.cat([sample, out, sample_, out_], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
@@ -76,8 +79,8 @@ if __name__ == '__main__':
     parser.add_argument('--epoch', type=int, default=560)
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--sched', type=str)
-    parser.add_argument('path', type=str)
-
+    parser.add_argument('--path1', type=str)
+    parser.add_argument('--path2', type=str)
     args = parser.parse_args()
 
     print(args)
@@ -93,9 +96,12 @@ if __name__ == '__main__':
         ]
     )
 
-    dataset = datasets.ImageFolder(args.path, transform=transform)
+    dataset = datasets.ImageFolder(args.path1, transform=transform)
     loader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=4)
-
+    
+    dataset_ = datasets.ImageFolder(args.path2, transform=transform)
+    loader_ = DataLoader(dataset_, batch_size=128, shuffle=True, num_workers=4)
+    
     model = nn.DataParallel(VQVAE()).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -106,7 +112,7 @@ if __name__ == '__main__':
         )
 
     for i in range(args.epoch):
-        train(i, loader, model, optimizer, scheduler, device)
+        train(i, loader, model, optimizer, scheduler, device, loader_)
         torch.save(
             model.module.state_dict(), f'checkpoint/vqvae_{str(i + 1).zfill(3)}.pt'
         )
