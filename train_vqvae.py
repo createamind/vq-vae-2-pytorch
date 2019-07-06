@@ -62,9 +62,18 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 break
             sample_ = img_[:sample_size]
             with torch.no_grad():
-                out, _ = model(sample)
-                out_, _ = model(sample_)
-
+                out, _, quant_t, quant_b = model(sample)
+                out_, _, quant_t, quant_b = model(sample_)
+            
+   
+            quant_t = quant_t.unsqueeze(1)  
+            quant_t = quant_t.repeat(1, 3, 8, 8)  
+            quant_b = quant_b.unsqueeze(1)  
+            quant_b = quant_b.repeat(1, 3, 4, 4)  
+            # print(sample_.type)
+            quant_b /= 512
+            # print(sample_)
+            quant_t /= 512
             utils.save_image(
                 torch.cat([sample, out, sample_, out_], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
@@ -72,25 +81,35 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 normalize=True,
                 range=(-1, 1),
             )
-
-             utils.save_image(
-                 quant_t,
-                 f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-                 nrow=sample_size,
-                 normalize=True,
-                 range=(-1, 1),
-             )
+   
+            utils.save_image(
+                torch.cat([quant_t, quant_b], 0),
+                f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
+                nrow=sample_size,
+                normalize=True,
+                range=(-1, 1),
+            )
+   
+            # print(quant_t.shape)
+            # utils.save_image(
+            #      quant_t[0:1,]/512,
+            #      f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
+            #      nrow=sample_size,
+           #      normalize=True,
+           #       range=(-1, 1),
+           #   )
                 
 
-             utils.save_image(
-                 quant_b,
-                 f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-                 nrow=sample_size,
-                 normalize=True,
-                 range=(-1, 1),
-             )                
+            # utils.save_image(
+            #      quant_b,
+            #      f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
+            #      nrow=sample_size,
+            #      normalize=True,
+            #      range=(-1, 1),
+            #  )                
 
             model.train()
+
 
 
 if __name__ == '__main__':
