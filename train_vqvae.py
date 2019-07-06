@@ -29,7 +29,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
 
         img = img.to(device)
 
-        out, latent_loss = model(img)
+        out, latent_loss, quant_t, quant_b = model(img)
         recon_loss = criterion(out, img)
         latent_loss = latent_loss.mean()
         loss = recon_loss + latent_loss_weight * latent_loss
@@ -73,13 +73,23 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 range=(-1, 1),
             )
 
-#             utils.save_image(
-#                 torch.cat([sample_, out_], 0),
-#                 f'sample/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-#                 nrow=sample_size,
-#                 normalize=True,
-#                 range=(-1, 1),
-#             )
+             utils.save_image(
+                 quant_t,
+                 f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
+                 nrow=sample_size,
+                 normalize=True,
+                 range=(-1, 1),
+             )
+                
+
+             utils.save_image(
+                 quant_b,
+                 f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
+                 nrow=sample_size,
+                 normalize=True,
+                 range=(-1, 1),
+             )                
+
             model.train()
 
 
