@@ -192,7 +192,7 @@ class VQVAE(nn.Module):
         quant_t, quant_b, diff, _, _ = self.encode(input)
         dec = self.decode(quant_t, quant_b)
 
-        return dec, diff
+        return dec, diff, quant_t, quant_b
 
     def encode(self, input):
         enc_b = self.enc_b(input)
