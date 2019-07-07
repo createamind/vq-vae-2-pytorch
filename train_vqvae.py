@@ -67,14 +67,14 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             
    
             quant_t = quant_t.unsqueeze(1)  
-            quant_t = quant_t.repeat(1, 3, 8, 8)  
+            quant_t = quant_t.repeat(1, 3, 64, 64)
             quant_b = quant_b.unsqueeze(1)  
-            quant_b = quant_b.repeat(1, 3, 4, 4)  
+            quant_b = quant_b.repeat(1, 3, 8, 8)
             # print(sample_.type)
-            quant_b = (quant_b - 256)/256
+            quant_b = (quant_b - 256 )/2
             # print(sample_)
             # quant_t /= 512
-            quant_t = (quant_t - 256)/256
+            quant_t = (quant_t -256 )/2
             utils.save_image(
                 torch.cat([sample, out, sample_, out_, quant_t.type(torch.float), quant_b.type(torch.float)], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
