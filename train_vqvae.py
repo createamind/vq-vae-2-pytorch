@@ -67,9 +67,9 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             
    
             quant_t = quant_t.unsqueeze(1)  
-            quant_t = quant_t.repeat(1, 3, 64, 64)
+            quant_t = quant_t.repeat(1, 3, 16, 16)
             quant_b = quant_b.unsqueeze(1)  
-            quant_b = quant_b.repeat(1, 3, 8, 8)
+            quant_b = quant_b.repeat(1, 3, 4, 4)
             # print(sample_.type)
             quant_b = (quant_b - 256 )/2
             # print(sample_)
