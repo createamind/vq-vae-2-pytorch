@@ -29,7 +29,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
 
         img = img.to(device)
 
-        out, latent_loss, quant_t, quant_b = model(img)
+        out, latent_loss, id_t, id_b = model(img)
         recon_loss = criterion(out, img)
         latent_loss = latent_loss.mean()
         loss = recon_loss + latent_loss_weight * latent_loss
@@ -62,28 +62,28 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 break
             sample_ = img_[:sample_size]
             with torch.no_grad():
-                out, _, quant_t, quant_b = model(sample)
-                out_, _, quant_t, quant_b = model(sample_)
+                out, _, id_t, id_b = model(sample)
+                out_, _, id_t, id_b = model(sample_)
             
    
-            quant_t = quant_t.unsqueeze(1)  
-            quant_t = quant_t.repeat(1, 3, 16, 16)
-            quant_b = quant_b.unsqueeze(1)  
-            quant_b = quant_b.repeat(1, 3, 4, 4)
+            id_t = id_t.unsqueeze(1)
+            id_t = id_t.repeat(1, 3, 64, 64)
+            id_b = id_b.unsqueeze(1)
+            id_b = id_b.repeat(1, 3, 8, 8)
             # print(sample_.type)
-            quant_b = (quant_b - 256 )/2
+            id_b = (id_b - 256 )/2
             # print(sample_)
-            # quant_t /= 512
-            quant_t = (quant_t -256 )/2
+            # id_t /= 512
+            id_t = (id_t -256 )/2
             utils.save_image(
-                torch.cat([sample, out, sample_, out_, quant_t.type(torch.float), quant_b.type(torch.float)], 0),
+                torch.cat([sample, out, sample_, out_, id_t.type(torch.float), id_b.type(torch.float)], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
                 range=(-1, 1),
             )
    
-            #      quant_t[0:1,]/512,
+            #      id_t[0:1,]/512,
             #      f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
             #      nrow=sample_size,
            #      normalize=True,
@@ -92,7 +92,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 
 
             # utils.save_image(
-            #      quant_b,
+            #      id_b,
             #      f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
             #      nrow=sample_size,
             #      normalize=True,
