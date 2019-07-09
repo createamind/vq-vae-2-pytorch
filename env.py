@@ -15,8 +15,21 @@ import subprocess
 import sys
 import time
 import traceback
-from vae_unit import encode, create_vae, decode
+# from vae_unit import encode, create_vae, decode
+import pickle
+
+import torch
+from torch.utils.data import DataLoader
+# from torchvision import transforms
+from torchvision import datasets, transforms, utils
+import lmdb
+from tqdm import tqdm
 import numpy as np
+
+from dataset import ImageFileDataset, CodeRow
+from vqvae import VQVAE
+import numpy as np
+
 try:
     import scipy.misc
 except Exception:
@@ -25,9 +38,11 @@ except Exception:
 import gym
 from gym.spaces import Box, Discrete, Tuple
 
-from scenarios import DEFAULT_SCENARIO, LANE_KEEP, TOWN2_STRAIGHT, TOWN2_ONE_CURVE, TOWN2_CUSTOM, TOWN1_NAVIGATION_DYNAMIC
+from scenarios import DEFAULT_SCENARIO, LANE_KEEP, TOWN2_STRAIGHT, TOWN2_ONE_CURVE, TOWN2_CUSTOM, \
+    TOWN1_NAVIGATION_DYNAMIC
 
 import os
+
 #
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
@@ -86,17 +101,17 @@ GROUND_Z = 0.22
 ENV_CONFIG = {
     "log_images": True,  # log images in _read_observation().
     "convert_images_to_video": False,  # convert log_images to videos. when "verbose" is True.
-    "verbose": False,    # print measurement information; write out measurement json file
+    "verbose": False,  # print measurement information; write out measurement json file
     "enable_planner": True,
     "framestack": 1,  # note: only [1, 2] currently supported
     "early_terminate_on_collision": True,
     "reward_function": "custom2",
     "render_x_res": 400,
     "render_y_res": 300,
-    "x_res": 128,  # cv2.resize()
-    "y_res": 128,  # cv2.resize()
-    "server_map": "/Game/Maps/Town01",
-    "scenarios": TOWN1_NAVIGATION_DYNAMIC,  # [LANE_KEEP]
+    "x_res": 256,  # cv2.resize()
+    "y_res": 256,  # cv2.resize()
+    "server_map": "/Game/Maps/Town02",
+    "scenarios": TOWN2_CUSTOM,  # [LANE_KEEP]
     "use_depth_camera": False,  # use depth instead of rgb.
     "discrete_actions": False,
     "squash_action_logits": False,
@@ -105,7 +120,7 @@ ENV_CONFIG = {
     "VAE": True,
     "SAC": True,
     "out_vae": False,
-    "action_repeat": 1,
+    "action_repeat": 2,
 }
 
 k = 0
@@ -128,7 +143,7 @@ atexit.register(cleanup)
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, config=ENV_CONFIG, enable_autopilot = False):
+    def __init__(self, config=ENV_CONFIG, enable_autopilot=False):
         self.config = config
         self.enable_autopilot = enable_autopilot
         self.city = self.config["server_map"].split("/")[-1]
@@ -139,49 +154,55 @@ class CarlaEnv(gym.Env):
         if config["discrete_actions"]:
             self.action_space = Discrete(len(DISCRETE_ACTIONS))  # It will be transformed to continuous 2D action.
         else:
-            self.action_space = Box(-1.0, 1.0, shape=(2, ), dtype=np.float32)   # 2D action.
+            self.action_space = Box(-1.0, 1.0, shape=(2,), dtype=np.float32)  # 2D action.
 
-        if config["use_depth_camera"]:
-            image_space = Box(
-                -1.0,
-                1.0,
-                shape=(config["y_res"], config["x_res"],
-                       1 * config["framestack"]),
-                dtype=np.float32)
-        else:
-            image_space = Box(
-                0,
-                255,
-                shape=(config["y_res"], config["x_res"],
-                       3 * config["framestack"]),
-                dtype=np.uint8)
-        # encode_measure ---> rgb + measurement_encode + pre_rgb #channel_type
-        # 3 + 3 + 1 = 7 #channel_number
-        if config["encode_measurement"]:
-             image_space = Box(
-                 0,
-                 255,
-                 shape=(config["y_res"], config["x_res"], 7),
-                 dtype=np.float32)
+        # if config["use_depth_camera"]:
+        #     image_space = Box(
+        #         -1.0,
+        #         1.0,
+        #         shape=(config["y_res"], config["x_res"],
+        #                1 * config["framestack"]),
+        #         dtype=np.float32)
+        # else:
+        #     image_space = Box(
+        #         0,
+        #         255,
+        #         shape=(config["y_res"], config["x_res"],
+        #                3 * config["framestack"]),
+        #         dtype=np.uint8)
+        # # encode_measure ---> rgb + measurement_encode + pre_rgb #channel_type
+        # # 3 + 3 + 1 = 7 #channel_number
+        # if config["encode_measurement"]:
+        #      image_space = Box(
+        #          0,
+        #          255,
+        #          shape=(config["y_res"], config["x_res"], 7),
+        #          dtype=np.float32)
+        #
+        # if config["use_seg"]:
+        #     image_space = Box(
+        #         0,
+        #         255,
+        #         shape=(config["y_res"], config["x_res"], 5),
+        #         dtype=np.float32)
+        # # The Observation Space
+        # if config["VAE"]:
+        #     image_space = Box(
+        #         0,
+        #         255,
+        #         shape=(517,),
+        #         dtype=np.float32)
+        image_space = Box(
+            -1.0,
+            1.0,
+            shape=(32, 32, 1),
+            dtype=np.float32)
 
-        if config["use_seg"]:
-            image_space = Box(
-                0,
-                255,
-                shape=(config["y_res"], config["x_res"], 5),
-                dtype=np.float32)
-        # The Observation Space
-        if config["VAE"]:
-            image_space = Box(
-                0,
-                255,
-                shape=(517,),
-                dtype=np.float32)
         self.observation_space = Tuple(
             [
                 image_space,
                 Discrete(len(COMMANDS_ENUM)),  # next_command
-                Box(-128.0, 128.0, shape=(2, ), dtype=np.float32)  # forward_speed, dist to goal
+                Box(-128.0, 128.0, shape=(2,), dtype=np.float32)  # forward_speed, dist to goal
             ])
 
         # TODO(ekl) this isn't really a proper gym spec
@@ -204,12 +225,30 @@ class CarlaEnv(gym.Env):
         self.start_coord = None
         self.end_coord = None
         self.last_obs = None
-        self.latent_dim = 256
-        self.vae = create_vae(self.latent_dim, return_kl_loss_op=False)
+        # self.latent_dim = 256
+        self.device = 'cuda'
+
+        # transform = transforms.Compose(
+        #     [
+        #         transforms.Resize(256),
+        #         transforms.CenterCrop(256),
+        #         transforms.ToTensor(),
+        #         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        #     ]
+        # )
+
+        # dataset = ImageFileDataset("/home/gu/carla_out/train_high", transform=transform)
+        # loader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=4)
+
+        model = VQVAE()
+        model.load_state_dict(torch.load("/home/gu/project/vq-vae-2-pytorch/checkpoint/vqvaecarla_007.pt"))
+        self.vae = model.to(self.device)
+
+        # self.vae = create_vae(self.latent_dim, return_kl_loss_op=False)
         # filepath = "/home/gu/project/ppo/ppo_carla/models/carla_model/high_ld_256_beta_1_r_1_lr_0.0001.hdf5"
-        filepath = "/home/gu/project/ppo/ppo_carla/models/carla_model/large_high_ld_256_beta_1.2_r_1_lr_5e-05_bc_128.hdf5"
-        self.vae.load_weights(filepath)
-        self.vae.trainable = False
+        # filepath = "/home/gu/project/ppo/ppo_carla/models/carla_model/large_high_ld_256_beta_1.2_r_1_lr_5e-05_bc_128.hdf5"
+        # self.vae.load_weights(filepath)
+        # self.vae.trainable = False
 
     def init_server(self):
         print("Initializing new Carla server...")
@@ -218,7 +257,8 @@ class CarlaEnv(gym.Env):
         self.server_process = subprocess.Popen(
             [
                 SERVER_BINARY, self.config["server_map"], "-windowed",
-                "-ResX=400", "-ResY=300", "-carla-server", "-benchmark -fps=10", #: to run the simulation at a fixed time-step of 0.1 seconds
+                "-ResX=400", "-ResY=300", "-carla-server", "-benchmark -fps=10",
+                #: to run the simulation at a fixed time-step of 0.1 seconds
                 "-carla-world-port={}".format(self.server_port)
             ],
             preexec_fn=os.setsid,
@@ -316,7 +356,7 @@ class CarlaEnv(gym.Env):
         # else:
         camera2 = Camera("CameraRGB")
         camera2.set_image_size(self.config["render_x_res"],
-                                self.config["render_y_res"])
+                               self.config["render_y_res"])
         camera2.set(FOV=110)
         camera2.set_position(1.2, 0.0, 1.7)
         settings.add_sensor(camera2)
@@ -393,25 +433,41 @@ class CarlaEnv(gym.Env):
         # print('distance to goal', py_measurements["distance_to_goal"])
         # print("speed", py_measurements["forward_speed"])
         if ENV_CONFIG["VAE"]:
-            image_in = np.stack([image, prev_image], axis=0)
-            latent_encode = encode(self.vae, image_in)   # encode image to latent space
-            if ENV_CONFIG["out_vae"]:
-                out_dir = os.path.join(CARLA_OUT_PATH, "vae")
-                if not os.path.exists(out_dir):
-                    os.makedirs(out_dir)
-                out_file = os.path.join(
-                    out_dir, "{}_{:>04}.jpg".format(self.episode_id,
-                                                    self.num_steps))
-                image = decode(self.vae, np.expand_dims(latent_encode[-1], axis=0))
-                scipy.misc.imsave(out_file, np.squeeze(image))
+            # image_in = np.stack([image, prev_image], axis=0)
+            # image_in = image
+            image_in = image.transpose((2, 0, 1))
+            image_in = torch.from_numpy(image_in)
+            image_in = image_in.to(self.device)
+            image_in = image_in.unsqueeze(0)
+            # image_in = image_in.type(torch.float32)
+            # latent_encode = encode(self.vae, image_in)   # encode image to latent space
 
-            if ENV_CONFIG["SAC"]:
-                # print(py_measurements["action"])
-                metric = np.array([COMMAND_ORDINAL[py_measurements["next_command"]]/4,
-                                           py_measurements["forward_speed"]/30,
-                                           py_measurements["distance_to_goal"]/100] + py_measurements["action"])
-                latent_encode = np.append(latent_encode.flatten(), metric)
-            obs = (latent_encode, COMMAND_ORDINAL[py_measurements["next_command"]], [
+            if ENV_CONFIG["out_vae"]:
+                dec, diff, latent_encode, id_b = self.vae(image_in)
+                # img = dec.detach().cpu().numpy()
+                utils.save_image((dec + 1) / 2, "/home/gu/carla_out/vq_vae/{}_{:>04}.jpg".format(self.episode_id,
+                                                                                                 self.num_steps))
+            else:
+                _, _, _, latent_encode, id_b = self.vae.encode(image_in)  # encode image to latent space
+
+            # if ENV_CONFIG["out_vae"]:
+            #     out_dir = os.path.join(CARLA_OUT_PATH, "vae")
+            #     if not os.path.exists(out_dir):
+            #         os.makedirs(out_dir)
+            #     out_file = os.path.join(
+            #         out_dir, "{}_{:>04}.jpg".format(self.episode_id,
+            #                                         self.num_steps))
+            #     image = decode(self.vae, np.expand_dims(latent_encode[-1], axis=0))
+            #     scipy.misc.imsave(out_file, np.squeeze(image))
+
+            # if ENV_CONFIG["SAC"]:
+            #     # print(py_measurements["action"])
+            #     metric = np.array([COMMAND_ORDINAL[py_measurements["next_command"]]/4,
+            #                                py_measurements["forward_speed"]/30,
+            #                                py_measurements["distance_to_goal"]/100] + py_measurements["action"])
+            #     latent_encode = np.append(latent_encode.flatten(), metric)
+            latent_encode = latent_encode.detach().cpu().numpy()
+            obs = (latent_encode.transpose([1, 2, 0]), COMMAND_ORDINAL[py_measurements["next_command"]], [
                 py_measurements["forward_speed"],
                 py_measurements["distance_to_goal"]
             ])
@@ -437,7 +493,8 @@ class CarlaEnv(gym.Env):
             ])
         self.last_obs = obs
 
-        return obs
+        return obs[0]
+
     # TODO:example of py_measurement
     # {'episode_id': '2019-02-22_11-26-36_990083',
     #  'step': 0,
@@ -482,9 +539,13 @@ class CarlaEnv(gym.Env):
 
     def step(self, action):
         try:
+            reward = 0
             for _ in range(ENV_CONFIG["action_repeat"]):
                 obs = self._step(action)
-            return obs
+                reward += obs[1]
+                # print(reward)
+            # obs[1] = reward
+            return (obs[0], reward, obs[2], obs[3])
         except Exception:
             print("Error during step, terminating episode early",
                   traceback.format_exc())
@@ -594,7 +655,6 @@ class CarlaEnv(gym.Env):
     #     print("Executing ffmpeg command", ffmpeg_cmd)
     #     subprocess.call(ffmpeg_cmd, shell=True)
 
-
     def images_to_video(self):
         videos_dir = os.path.join(CARLA_OUT_PATH, "Videos")
         if not os.path.exists(videos_dir):
@@ -608,7 +668,7 @@ class CarlaEnv(gym.Env):
             y_res=self.config["y_res"],
             vid=os.path.join(videos_dir, self.episode_id),
             # img=os.path.join(CARLA_OUT_PATH, "CameraRGB", self.episode_id))
-            img=os.path.join(CARLA_OUT_PATH, "vae", self.episode_id))
+            img=os.path.join(CARLA_OUT_PATH, "vq_vae", self.episode_id))
         print("Executing ffmpeg command", ffmpeg_cmd)
         subprocess.call(ffmpeg_cmd, shell=True)
 
@@ -616,7 +676,7 @@ class CarlaEnv(gym.Env):
         if self.config["encode_measurement"]:
             # data = (image - 0.5) * 2
             data = image.reshape(self.config["render_y_res"],
-                                self.config["render_x_res"], -1)
+                                 self.config["render_x_res"], -1)
             data = cv2.resize(
                 data, (self.config["x_res"], self.config["y_res"]),
                 interpolation=cv2.INTER_AREA)
@@ -632,28 +692,28 @@ class CarlaEnv(gym.Env):
         if self.config["verbose"]:
             print_measurements(measurements)
 
-        observation = None
-        if self.config["use_seg"]:
-            observation = np.concatenate(((sensor_data["Segmentation"].data[:, :, np.newaxis] - 7)/7,
-                                        (sensor_data["CameraDepth"].data[:, :, np.newaxis] - 0.5)*0.5), axis=2)
-        elif self.config["encode_measurement"]:
-            # print(sensor_data["CameraRGB"].data.shape, sensor_data["CameraDepth"].data.shape)
-            #observation = np.concatenate(((sensor_data["CameraRGB"].data.astype(np.float32)-128)/128,
-            #                            (sensor_data["CameraDepth"].data[:, :, np.newaxis] - 0.5)*0.5), axis=2)
-            observation = (sensor_data["CameraRGB"].data.astype(np.float32) - 128)/128
-            # observation = (sensor_data["CameraRGB"].data.astype(np.float32)/255) - 0.5
-            # print("observation_shape", observation.shape)
+        # observation = None
+        # if self.config["use_seg"]:
+        #     observation = np.concatenate(((sensor_data["Segmentation"].data[:, :, np.newaxis] - 7)/7,
+        #                                 (sensor_data["CameraDepth"].data[:, :, np.newaxis] - 0.5)*0.5), axis=2)
+        # elif self.config["encode_measurement"]:
+        # print(sensor_data["CameraRGB"].data.shape, sensor_data["CameraDepth"].data.shape)
+        # observation = np.concatenate(((sensor_data["CameraRGB"].data.astype(np.float32)-128)/128,
+        #                            (sensor_data["CameraDepth"].data[:, :, np.newaxis] - 0.5)*0.5), axis=2)
+        observation = (sensor_data["CameraRGB"].data.astype(np.float32) - 128) / 128
+        # observation = (sensor_data["CameraRGB"].data.astype(np.float32)/255) - 0.5
+        # print("observation_shape", observation.shape)
 
-        else:
-            if self.config["use_depth_camera"]:
-                camera_name = "CameraDepth"
-
-            else:
-                camera_name = "CameraRGB"
-
-            for name, image in sensor_data.items():
-                if name == camera_name:
-                    observation = image
+        # else:
+        #     if self.config["use_depth_camera"]:
+        #         camera_name = "CameraDepth"
+        #
+        #     else:
+        #         camera_name = "CameraRGB"
+        #
+        #     for name, image in sensor_data.items():
+        #         if name == camera_name:
+        #             observation = image
 
         cur = measurements.player_measurements
 
@@ -683,8 +743,8 @@ class CarlaEnv(gym.Env):
             ], [self.end_pos.location.x, self.end_pos.location.y, GROUND_Z], [
                 self.end_pos.orientation.x, self.end_pos.orientation.y,
                 GROUND_Z
-            ])  
-        # now the metrix should be meter carla8.0
+            ])
+            # now the metrix should be meter carla8.0
         # TODO run experience to verify the scale of distance in order to determine reward function          
         else:
             distance_to_goal = -1
@@ -702,7 +762,7 @@ class CarlaEnv(gym.Env):
             "y": cur.transform.location.y,
             "x_orient": cur.transform.orientation.x,
             "y_orient": cur.transform.orientation.y,
-            "forward_speed": cur.forward_speed*3.6,
+            "forward_speed": cur.forward_speed * 3.6,
             "distance_to_goal": distance_to_goal,
             "distance_to_goal_euclidean": distance_to_goal_euclidean,
             "collision_vehicles": cur.collision_vehicles,
@@ -755,17 +815,17 @@ def compute_reward_corl2017(env, prev, current):
 
     # New collision damage
     reward -= .00002 * (
-        current["collision_vehicles"] + current["collision_pedestrians"] +
-        current["collision_other"] - prev["collision_vehicles"] -
-        prev["collision_pedestrians"] - prev["collision_other"])
+            current["collision_vehicles"] + current["collision_pedestrians"] +
+            current["collision_other"] - prev["collision_vehicles"] -
+            prev["collision_pedestrians"] - prev["collision_other"])
 
     # New sidewalk intersection
     reward -= 2 * (
-        current["intersection_offroad"] - prev["intersection_offroad"])
+            current["intersection_offroad"] - prev["intersection_offroad"])
 
     # New opposite lane intersection
     reward -= 2 * (
-        current["intersection_otherlane"] - prev["intersection_otherlane"])
+            current["intersection_otherlane"] - prev["intersection_otherlane"])
 
     return reward
 
@@ -785,19 +845,19 @@ def compute_reward_custom(env, prev, current):
     # Speed reward, up 30.0 (km/h)
     reward += np.clip(current["forward_speed"], 0.0, 30.0) / 10
     if current["forward_speed"] > 40:
-        reward -= (current["forward_speed"] - 40)/12 
-    # New collision damage
+        reward -= (current["forward_speed"] - 40) / 12
+        # New collision damage
     new_damage = (
-        current["collision_vehicles"] + current["collision_pedestrians"] +
-        current["collision_other"] - prev["collision_vehicles"] -
-        prev["collision_pedestrians"] - prev["collision_other"])
+            current["collision_vehicles"] + current["collision_pedestrians"] +
+            current["collision_other"] - prev["collision_vehicles"] -
+            prev["collision_pedestrians"] - prev["collision_other"])
     # print(current["collision_other"], current["collision_vehicles"], current["collision_pedestrians"])
     # 0.0 41168.109375 0.0
     if new_damage:
         reward -= 15 + current["forward_speed"] * 3
 
     # Sidewalk intersection
-    reward -= np.clip(10 * current["forward_speed"] * int(current["intersection_offroad"] > 0.001), 0, 50)   # [0, 1]
+    reward -= np.clip(10 * current["forward_speed"] * int(current["intersection_offroad"] > 0.001), 0, 50)  # [0, 1]
     # print(current["intersection_offroad"])
     # Opposite lane intersection
     reward -= 4 * current["intersection_otherlane"]  # [0, 1]
@@ -811,7 +871,7 @@ def compute_reward_custom(env, prev, current):
 
 
 def compute_reward_custom_2(env, prev, current):
-    reward = 0.0
+    reward = 0
 
     # cur_dist = current["distance_to_goal"]
     # prev_dist = prev["distance_to_goal"]
@@ -825,24 +885,25 @@ def compute_reward_custom_2(env, prev, current):
     # Speed reward, up 30.0 (km/h)
     reward += np.clip(current["forward_speed"], 0.0, 30.0) / 6
     if current["forward_speed"] > 40:
-        reward -= (current["forward_speed"] - 40)/12
+        reward -= (current["forward_speed"] - 40) / 12
     # New collision damage
     new_damage = (
-        current["collision_vehicles"] + current["collision_pedestrians"] +
-        current["collision_other"] - prev["collision_vehicles"] -
-        prev["collision_pedestrians"] - prev["collision_other"])
+            current["collision_vehicles"] + current["collision_pedestrians"] +
+            current["collision_other"] - prev["collision_vehicles"] -
+            prev["collision_pedestrians"] - prev["collision_other"])
     if new_damage:
-        reward -= 15 + (current["forward_speed"]/3)**2
+        reward -= 15 + (current["forward_speed"] / 3) ** 2
         print("<<<<<<<<<<<<<<<<<<damage>>>>>>>>>>>>>>>>>>>")
-    reward -= 0.02 * (current["control"]["steer"]**2)
-    reward -= np.clip(10 * current["forward_speed"] * int(current["intersection_offroad"] > 0.05), 0, 20)   # [0, 1]
+    reward -= 0.02 * (current["control"]["steer"] ** 2)
+    reward -= np.clip(10 * current["forward_speed"] * int(current["intersection_offroad"] > 0.05), 0, 20)  # [0, 1]
     reward -= 4 * current["intersection_otherlane"]  # [0, 1]
-    reward -= 0.05 if current["forward_speed"] < 1 else 0
+    reward -= 0.005 if current["forward_speed"] < 1 else 0
 
     # if current["next_command"] == "REACH_GOAL":
     #     reward += 10
     #     print('bro, you reach the goal, well done!!!')
     return reward
+
 
 def compute_reward_lane_keep(env, prev, current):
     reward = 0.0
@@ -852,17 +913,17 @@ def compute_reward_lane_keep(env, prev, current):
 
     # New collision damage
     new_damage = (
-        current["collision_vehicles"] + current["collision_pedestrians"] +
-        current["collision_other"] - prev["collision_vehicles"] -
-        prev["collision_pedestrians"] - prev["collision_other"])
+            current["collision_vehicles"] + current["collision_pedestrians"] +
+            current["collision_other"] - prev["collision_vehicles"] -
+            prev["collision_pedestrians"] - prev["collision_other"])
     if new_damage:
         reward -= 80.0
 
     # Sidewalk intersection
-    reward -= 0.2*current["intersection_offroad"]
+    reward -= 0.2 * current["intersection_offroad"]
 
     # Opposite lane intersection
-    reward -= 0.5*current["intersection_otherlane"]
+    reward -= 0.5 * current["intersection_otherlane"]
 
     return reward
 
@@ -873,6 +934,8 @@ REWARD_FUNCTIONS = {
     "custom2": compute_reward_custom_2,
     "lane_keep": compute_reward_lane_keep,
 }
+
+
 def compute_reward(env, prev, current):
     return REWARD_FUNCTIONS[env.config["reward_function"]](env, prev, current)
 
@@ -887,8 +950,8 @@ def print_measurements(measurements):
     message += "{other_lane:.0f}% other lane, {offroad:.0f}% off-road, "
     message += "({agents_num:d} non-player agents in the scene)"
     message = message.format(
-        pos_x=player_measurements.transform.location.x ,  # m in calra8
-        pos_y=player_measurements.transform.location.y ,
+        pos_x=player_measurements.transform.location.x,  # m in calra8
+        pos_y=player_measurements.transform.location.y,
         speed=player_measurements.forward_speed,
         col_cars=player_measurements.collision_vehicles,
         col_ped=player_measurements.collision_pedestrians,
@@ -914,8 +977,8 @@ def collided_done(py_measurements):
 if __name__ == "__main__":
     for _ in range(2):
         env = CarlaEnv(enable_autopilot=True)
-        obs = env.reset()      
-        print(obs[0].shape) 
+        obs = env.reset()
+        print(obs[0].shape, obs[0].min(), obs[0].max())
         start = time.time
         # import matplotlib.pyplot as plt
         # plt.show()
@@ -926,7 +989,7 @@ if __name__ == "__main__":
         while 1:
             # print(i)
             i += 1
-            if i > 1000:
+            if i > 500:
                 i = 0
                 # env.images_to_video()
                 env.reset()
@@ -935,7 +998,7 @@ if __name__ == "__main__":
                 # print(obs[0].shape)
             else:
                 obs, reward, done, info = env.step([0, 0])
-                print(obs[0].shape)
+                print(obs[0].shape, obs[0].min(), obs[0].max())
                 # print(reward)
             total_reward += reward
         # print("{:.2f} fps".format(float(i / (time.time() - start))))

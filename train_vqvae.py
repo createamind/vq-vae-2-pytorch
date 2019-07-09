@@ -64,17 +64,16 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             with torch.no_grad():
                 out, _, quant_t, quant_b = model(sample)
                 out_, _, quant_t, quant_b = model(sample_)
-            
-   
-            quant_t = quant_t.unsqueeze(1)  
-            quant_t = quant_t.repeat(1, 3, 8, 8)  
-            quant_b = quant_b.unsqueeze(1)  
-            quant_b = quant_b.repeat(1, 3, 4, 4)  
+
+            quant_t = quant_t.unsqueeze(1)
+            quant_t = quant_t.repeat(1, 3, 8, 8)
+            quant_b = quant_b.unsqueeze(1)
+            quant_b = quant_b.repeat(1, 3, 4, 4)
             # print(sample_.type)
-            quant_b = (quant_b - 256)/256
+            quant_b = (quant_b - 256) / 256
             # print(sample_)
             # quant_t /= 512
-            quant_t = (quant_t - 256)/256
+            quant_t = (quant_t - 256) / 256
             utils.save_image(
                 torch.cat([sample, out, sample_, out_, quant_t.type(torch.float), quant_b.type(torch.float)], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
@@ -84,7 +83,6 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             )
 
             model.train()
-
 
 
 if __name__ == '__main__':
@@ -100,7 +98,7 @@ if __name__ == '__main__':
     print(args)
 
     device = 'cuda'
-
+    # default is [0 1] normalize img to [-1 1]
     transform = transforms.Compose(
         [
             transforms.Resize(args.size),
@@ -112,10 +110,10 @@ if __name__ == '__main__':
 
     dataset = datasets.ImageFolder(args.path1, transform=transform)
     loader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=4)
-    
+
     dataset_ = datasets.ImageFolder(args.path2, transform=transform)
     loader_ = DataLoader(dataset_, batch_size=128, shuffle=True, num_workers=4)
-    
+
     model = nn.DataParallel(VQVAE()).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
