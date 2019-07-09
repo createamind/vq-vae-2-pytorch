@@ -82,22 +82,6 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 normalize=True,
                 range=(-1, 1),
             )
-   
-            #      quant_t[0:1,]/512,
-            #      f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-            #      nrow=sample_size,
-           #      normalize=True,
-           #       range=(-1, 1),
-           #   )
-                
-
-            # utils.save_image(
-            #      quant_b,
-            #      f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-            #      nrow=sample_size,
-            #      normalize=True,
-            #      range=(-1, 1),
-            #  )                
 
             model.train()
 
