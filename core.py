@@ -34,7 +34,7 @@ def mlp(x, hidden_sizes=(32,), activation=tf.tanh, output_activation=None):
 
 
 def cnn_layer(x):
-    x = tf.reshape(x, [-1, 32, 32, 1])
+    x = tf.reshape(x, [-1, 32, 32, 2])
     x = tf.nn.relu(tf.layers.conv2d(x, 8, [3, 3], strides=(2, 2), padding='SAME',
                                     kernel_initializer=tf.contrib.layers.xavier_initializer()))
     x = tf.nn.relu(tf.layers.conv2d(x, 16, [3, 3], strides=(2, 2), padding='SAME',

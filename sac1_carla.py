@@ -262,7 +262,6 @@ def sac1_carla(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), see
 
     # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
-
         """
         Until start_steps have elapsed, randomly sample actions
         from a uniform distribution for better exploration. Afterwards, 
@@ -326,7 +325,6 @@ def sac1_carla(env_fn, actor_critic=core.mlp_actor_critic, ac_kwargs=dict(), see
 
             # Test the performance of the deterministic version of the agent.
             test_agent()
-
             # logger.store(): store the data; logger.log_tabular(): log the data; logger.dump_tabular(): write the data
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)
@@ -360,7 +358,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--steps_per_epoch', type=int, default=5000)
     parser.add_argument('--alpha', default=0.1, help="alpha can be either 'auto' or float(e.g:0.2).")
-    parser.add_argument('--exp_name', type=str, default='sac1_carla_320_256_vqvae_alpha_0.1')
+    parser.add_argument('--exp_name', type=str, default='sac1_carla_320_256_vqvae1_alpha_0.1')
     args = parser.parse_args()
 
     from spinup.utils.run_utils import setup_logger_kwargs
