@@ -12,6 +12,9 @@ build/
 develop-eggs/
 dist/
 downloads/
+sample/
+.idea/
+checkpoint/
 eggs/
 .eggs/
 lib/
