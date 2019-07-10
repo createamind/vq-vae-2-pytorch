@@ -444,11 +444,13 @@ class CarlaEnv(gym.Env):
 
             if ENV_CONFIG["out_vae"]:
                 dec, diff, latent_encode, id_b = self.vae(image_in)
+                # dec, diff, latent_encode, id_b = self.vae(image_in)
                 # img = dec.detach().cpu().numpy()
                 utils.save_image((dec + 1) / 2, "/home/gu/carla_out/vq_vae/{}_{:>04}.jpg".format(self.episode_id,
                                                                                                  self.num_steps))
             else:
-                _, _, _, latent_encode, id_b = self.vae.encode(image_in)  # encode image to latent space
+                latent_encode, diff_b, id_b = self.vae.encode(image_in)  # encode image to latent space
+                # _, _, _, latent_encode, id_b = self.vae.encode(image_in)  # encode image to latent space
 
             # if ENV_CONFIG["out_vae"]:
             #     out_dir = os.path.join(CARLA_OUT_PATH, "vae")
@@ -467,7 +469,7 @@ class CarlaEnv(gym.Env):
             #                                py_measurements["distance_to_goal"]/100] + py_measurements["action"])
             #     latent_encode = np.append(latent_encode.flatten(), metric)
             latent_encode = latent_encode.detach().cpu().numpy()
-            obs = (latent_encode.transpose([1, 2, 0]), COMMAND_ORDINAL[py_measurements["next_command"]], [
+            obs = (latent_encode[0].transpose([1, 2, 0]), COMMAND_ORDINAL[py_measurements["next_command"]], [
                 py_measurements["forward_speed"],
                 py_measurements["distance_to_goal"]
             ])
