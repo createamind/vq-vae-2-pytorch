@@ -29,7 +29,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
 
         img = img.to(device)
 
-        out, latent_loss, id_t, id_b = model(img)
+        out, latent_loss, id_t = model(img)
         recon_loss = criterion(out, img)
         latent_loss = latent_loss.mean()
         loss = recon_loss + latent_loss_weight * latent_loss
@@ -62,21 +62,21 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 break
             sample_ = img_[:sample_size]
             with torch.no_grad():
-                out, _, id_t, id_b = model(sample)
-                out_, _, id_t, id_b = model(sample_)
+                out, _, id_t = model(sample)
+                out_, _, id_t  = model(sample_)
             
    
             id_t = id_t.unsqueeze(1)
-            id_t = id_t.repeat(1, 3, 64, 64)
-            id_b = id_b.unsqueeze(1)
-            id_b = id_b.repeat(1, 3, 8, 8)
+            id_t = id_t.repeat(1, 3, 8, 8)
+            #id_b = id_b.unsqueeze(1)
+            #id_b = id_b.repeat(1, 3, 8, 8)
             # print(sample_.type)
-            id_b = (id_b - 256 )/2
+            #id_b = (id_b - 256 )/2
             # print(sample_)
             # id_t /= 512
             id_t = (id_t -256 )/2
             utils.save_image(
-                torch.cat([sample, out, sample_, out_, id_t.type(torch.float), id_b.type(torch.float)], 0),
+                torch.cat([sample, out, sample_, out_, id_t.type(torch.float)], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
