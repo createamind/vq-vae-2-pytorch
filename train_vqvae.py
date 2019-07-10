@@ -56,7 +56,6 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             model.eval()
 
             sample = img[:sample_size]
-            # img_, _ = loader_.next()
             for _, (img_, label) in enumerate(loader_):
                 img_ = img_.to(device)
                 break
@@ -82,22 +81,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
                 normalize=True,
                 range=(-1, 1),
             )
-   
-            #      id_t[0:1,]/512,
-            #      f'top/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-            #      nrow=sample_size,
-           #      normalize=True,
-           #       range=(-1, 1),
-           #   )
-                
 
-            # utils.save_image(
-            #      id_b,
-            #      f'bottom/{str(epoch + 1).zfill(5)}_{str("test")}_{str(i).zfill(5)}.png',
-            #      nrow=sample_size,
-            #      normalize=True,
-            #      range=(-1, 1),
-            #  )                
 
             model.train()
 

@@ -195,7 +195,7 @@ class CarlaEnv(gym.Env):
         image_space = Box(
             -1.0,
             1.0,
-            shape=(32, 32, 1),
+            shape=(32, 32, 2),
             dtype=np.float32)
 
         self.observation_space = Tuple(
@@ -241,7 +241,7 @@ class CarlaEnv(gym.Env):
         # loader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=4)
 
         model = VQVAE()
-        model.load_state_dict(torch.load("/home/gu/project/vq-vae-2-pytorch/checkpoint/vqvaecarla_007.pt"))
+        model.load_state_dict(torch.load("/home/gu/project/vq-vae-2-pytorch/checkpoint/carla2.pt"))
         self.vae = model.to(self.device)
 
         # self.vae = create_vae(self.latent_dim, return_kl_loss_op=False)
