@@ -491,7 +491,7 @@ class CarlaEnv(gym.Env):
                 py_measurements["forward_speed"],
                 py_measurements["distance_to_goal"]
             ])
-        self.last_obs = obs
+        self.last_obs = obs[0]
 
         return obs[0]
 
