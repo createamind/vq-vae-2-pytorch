@@ -63,7 +63,7 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             sample_ = img_[:sample_size]
             with torch.no_grad():
                 out, _, id_t, quant = model(sample)
-                out_, _, id_t ,quant_ = model(sample_)
+                out_, _, id_t_ ,quant_ = model(sample_)
             
             #print(id_t.shape)
             #print(quant.shape)
@@ -72,15 +72,15 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             #quant = quant.unsqueeze(2)
             quant = quant.repeat(1, 1, 8, 8)
 
-            #id_b = id_b.unsqueeze(1)
-            #id_b = id_b.repeat(1, 3, 8, 8)
+            id_t_ = id_t_.unsqueeze(1)
+            id_t_ = id_t_.repeat(1, 3, 8, 8)
             # print(sample_.type)
             #id_b = (id_b - 256 )/2
             # print(sample_)
             # id_t /= 512
             id_t = (id_t -256 )/2
             utils.save_image(
-                torch.cat([sample, out, quant.type(torch.float), sample_, out_, id_t.type(torch.float) ], 0),
+                torch.cat([sample, out, quant.type(torch.float),  id_t.type(torch.float), sample_, out_, id_t_.type(torch.float) ], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
