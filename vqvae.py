@@ -177,7 +177,7 @@ class VQVAE(nn.Module):
         channel=128,
         n_res_block=2,
         n_res_channel=32,
-        embed_dim=2,
+        embed_dim=3,
         n_embed=512,
         decay=0.99,
     ):
@@ -208,7 +208,7 @@ class VQVAE(nn.Module):
         quant_t, diff, id_t = self.encode(input)
         dec = self.decode(quant_t)
 
-        return dec, diff,id_t
+        return dec, diff,id_t,quant_t
 
     def encode(self, input):
         enc_b = self.enc_b(input)
