@@ -71,16 +71,17 @@ def train(epoch, loader, model, optimizer, scheduler, device, loader_):
             id_t = id_t.repeat(1, 3, 8, 8)
             #quant = quant.unsqueeze(2)
             quant = quant.repeat(1, 1, 8, 8)
-
+            quant_ = quant_.repeat(1, 1, 8, 8)
             id_t_ = id_t_.unsqueeze(1)
             id_t_ = id_t_.repeat(1, 3, 8, 8)
             # print(sample_.type)
             #id_b = (id_b - 256 )/2
             # print(sample_)
             # id_t /= 512
-            id_t = (id_t -256 )/2
+            id_t = (id_t -5 )/2
+            id_t_ = (id_t_ - 5) / 2
             utils.save_image(
-                torch.cat([sample, out, quant.type(torch.float),  id_t.type(torch.float), sample_, out_, id_t_.type(torch.float) ], 0),
+                torch.cat([sample, out, quant.type(torch.float),  id_t.type(torch.float), sample_, out_, quant_.type(torch.float), id_t_.type(torch.float) ], 0),
                 f'sample/{str(epoch + 1).zfill(5)}_{str(i).zfill(5)}.png',
                 nrow=sample_size,
                 normalize=True,
